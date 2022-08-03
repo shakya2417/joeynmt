@@ -1,0 +1,51 @@
+{
+  "builder_name": "get_tatoeba",
+  "citation": "@InProceedings{TIEDEMANN12.463,\n  author = {J{\"o}rg}rg Tiedemann},\n  title = {Parallel Data, Tools and Interfaces in OPUS},\n  booktitle = {Proceedings of the Eight International Conference on Language Resources and Evaluation (LREC'12)},\n  year = {2012},\n  month = {may},\n  date = {23-25},\n  address = {Istanbul, Turkey},\n  editor = {Nicoletta Calzolari (Conference Chair) and Khalid Choukri and Thierry Declerck and Mehmet Ugur Dogan and Bente Maegaard and Joseph Mariani and Jan Odijk and Stelios Piperidis},\n  publisher = {European Language Resources Association (ELRA)},\n  isbn = {978-2-9517408-7-7},\n  language = {english}\n }\n",
+  "config_name": "de-en",
+  "dataset_size": 29080831,
+  "description": "This is a collection of translated sentences from Tatoeba\n359 languages, 3,403 bitexts\ntotal number of files: 750\ntotal number of tokens: 65.54M\ntotal number of sentence fragments: 8.96M\n",
+  "download_checksums": {
+    "https://object.pouta.csc.fi/OPUS-Tatoeba/v2021-07-22/moses/de-en.txt.zip": {
+      "num_bytes": 9882603,
+      "checksum": null
+    }
+  },
+  "download_size": 9882603,
+  "features": {
+    "id": {
+      "dtype": "string",
+      "id": null,
+      "_type": "Value"
+    },
+    "translation": {
+      "languages": [
+        "de",
+        "en"
+      ],
+      "id": null,
+      "_type": "Translation"
+    }
+  },
+  "homepage": "http://opus.nlpl.eu/Tatoeba.php",
+  "license": "",
+  "post_processed": null,
+  "post_processing_size": null,
+  "size_in_bytes": 38963434,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 29080831,
+      "num_examples": 307372,
+      "dataset_name": "get_tatoeba"
+    }
+  },
+  "supervised_keys": null,
+  "task_templates": null,
+  "version": {
+    "version_str": "2021.7.22",
+    "description": null,
+    "major": 2021,
+    "minor": 7,
+    "patch": 22
+  }
+}
