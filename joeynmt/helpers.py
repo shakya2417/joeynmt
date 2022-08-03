@@ -65,7 +65,7 @@ def make_logger(log_dir: Path = None, mode: str = "train") -> str:
     :return: joeynmt version number
     """
     logger = logging.getLogger("")  # root logger
-    version = pkg_resources.require("joeynmt")[0].version
+    version = "2.0.0" # pkg_resources.require("joeynmt")[0].version
 
     # add handlers only once.
     if len(logger.handlers) == 0:
