@@ -87,7 +87,6 @@ $ pip install joeynmt
   $ python -m unittest
   ```
 
-
 **[Optional]** For fp16 training, install NVIDIA's [apex](https://github.com/NVIDIA/apex) library:
 ```bash
 $ git clone https://github.com/NVIDIA/apex
@@ -95,6 +94,12 @@ $ cd apex
 $ pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 ```
 
+### C. Via conda
+1. Install conda from [Anaconda](https://www.anaconda.com/products/distribution#linux)
+2. Use the `environment.yml` to build a reproducible environment.
+```commandline
+$ conda env create -f environment.yml
+```
 ## Change logs
 ### v2.0 *Breaking change!*
 - upgrade to python 3.9, torch 1.11
