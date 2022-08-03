@@ -1,0 +1,200 @@
+
+name: "tatoeba_enhi_sp"
+joeynmt_version: "2.0.0"
+
+data:
+    train: "/content/drive/MyDrive/tatoeba_enhi/train"
+    dev: "/content/drive/MyDrive/tatoeba_enhi/validation"
+    test: "/content/drive/MyDrive/tatoeba_enhi/test"
+    dataset_type: "huggingface"
+    #dataset_cfg:           # not necessary for manually saved pyarray daraset
+    #    name: "en-hi"
+    sample_dev_subset: 200
+    src:
+        lang: "en"
+        max_length: 100
+        lowercase: False
+        normalize: False
+        level: "bpe"
+        voc_limit: 8240
+        voc_min_freq: 1
+        voc_file: "/content/drive/MyDrive/tatoeba_enhi/vocab.txt"
+        tokenizer_type: "sentencepiece"
+        tokenizer_cfg:
+            model_file: "/content/drive/MyDrive/tatoeba_enhi/sp.model"
+
+    trg:
+        lang: "hi"
+        max_length: 100
+        lowercase: False
+        normalize: False
+        level: "bpe"
+        voc_limit: 8240
+        voc_min_freq: 1
+        voc_file: "/content/drive/MyDrive/tatoeba_enhi/vocab.txt"
+        tokenizer_type: "sentencepiece"
+        tokenizer_cfg:
+            model_file: "/content/drive/MyDrive/tatoeba_enhi/sp.model"
+
+
+testing:
+    n_best: 1
+    beam_size: 5
+    beam_alpha: 1.0
+    batch_size: 256
+    batch_type: "token"
+    max_output_length: 100
+    eval_metrics: ["bleu"]
+    #return_prob: "hyp"
+    #return_attention: False
+    sacrebleu_cfg:
+        tokenize: "13a"
+
+training:
+    #load_model: "/content/drive/MyDrive/models/tatoeba_deen/latest.ckpt"
+    #reset_best_ckpt: False
+    #reset_scheduler: False
+    #reset_optimizer: False
+    #reset_iter_state: False
+    random_seed: 42
+    optimizer: "adam"
+    normalization: "tokens"
+    adam_betas: [0.9, 0.999]
+    scheduling: "warmupinversesquareroot"
+    learning_rate_warmup: 2000
+    learning_rate: 0.0002
+    learning_rate_min: 0.00000001
+    weight_decay: 0.0
+    label_smoothing: 0.1
+    loss: "crossentropy"
+    batch_size: 512
+    batch_type: "token"
+    batch_multiplier: 4
+    early_stopping_metric: "bleu"
+    epochs: 10
+    updates: 20000
+    validation_freq: 1000
+    logging_freq: 100
+    model_dir: "/content/drive/MyDrive/models/tatoeba_deen"
+    overwrite: True
+    shuffle: True
+    use_cuda: True
+    print_valid_sents: [0, 1, 2, 3]
+    keep_best_ckpts: 3
+
+model:
+    initializer: "xavier"
+    bias_initializer: "zeros"
+    init_gain: 1.0
+    embed_initializer: "xavier"
+    embed_init_gain: 1.0
+    tied_embeddings: True
+    tied_softmax: True
+    encoder:
+        type: "transformer"
+        num_layers: 6
+        num_heads: 4
+        embeddings:
+            embedding_dim: 256
+            scale: True
+            dropout: 0.0
+        # typically ff_size = 4 x hidden_size
+        hidden_size: 256
+        ff_size: 1024
+        dropout: 0.1
+        layer_norm: "pre"
+    decoder:
+        type: "transformer"
+        num_layers: 6
+        num_heads: 8
+        embeddings:
+            embedding_dim: 256
+            scale: True
+            dropout: 0.0
+        # typically ff_size = 4 x hidden_size
+        hidden_size: 256
+        ff_size: 1024
+        dropout: 0.1
+        layer_norm: "pre"
+
+
+testing:
+    n_best: 1
+    beam_size: 5
+    beam_alpha: 1.0
+    batch_size: 256
+    batch_type: "token"
+    max_output_length: 100
+    eval_metrics: ["bleu"]
+    #return_prob: "hyp"
+    #return_attention: False
+    sacrebleu_cfg:
+        tokenize: "13a"
+
+training:
+    #load_model: "/content/drive/MyDrive/models/tatoeba_enhi/latest.ckpt"
+    #reset_best_ckpt: False
+    #reset_scheduler: False
+    #reset_optimizer: False
+    #reset_iter_state: False
+    random_seed: 42
+    optimizer: "adam"
+    normalization: "tokens"
+    adam_betas: [0.9, 0.999]
+    scheduling: "warmupinversesquareroot"
+    learning_rate_warmup: 2000
+    learning_rate: 0.0002
+    learning_rate_min: 0.00000001
+    weight_decay: 0.0
+    label_smoothing: 0.1
+    loss: "crossentropy"
+    batch_size: 512
+    batch_type: "token"
+    batch_multiplier: 4
+    early_stopping_metric: "bleu"
+    epochs: 10
+    updates: 20000
+    validation_freq: 1000
+    logging_freq: 100
+    model_dir: "/content/drive/MyDrive/models/tatoeba_enhi"
+    overwrite: True
+    shuffle: True
+    use_cuda: True
+    print_valid_sents: [0, 1, 2, 3]
+    keep_best_ckpts: 3
+
+model:
+    initializer: "xavier"
+    bias_initializer: "zeros"
+    init_gain: 1.0
+    embed_initializer: "xavier"
+    embed_init_gain: 1.0
+    tied_embeddings: True
+    tied_softmax: True
+    encoder:
+        type: "transformer"
+        num_layers: 6
+        num_heads: 4
+        embeddings:
+            embedding_dim: 256
+            scale: True
+            dropout: 0.0
+        # typically ff_size = 4 x hidden_size
+        hidden_size: 256
+        ff_size: 1024
+        dropout: 0.1
+        layer_norm: "pre"
+    decoder:
+        type: "transformer"
+        num_layers: 6
+        num_heads: 8
+        embeddings:
+            embedding_dim: 256
+            scale: True
+            dropout: 0.0
+        # typically ff_size = 4 x hidden_size
+        hidden_size: 256
+        ff_size: 1024
+        dropout: 0.1
+        layer_norm: "pre"
+
