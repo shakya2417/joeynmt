@@ -902,7 +902,7 @@ def random_query(data_loader, query_size=10):
     # Because the data has already been shuffled inside the data loader,
     # we can simply return the `query_size` first samples from it
     for batch in data_loader:
-        
+        print(batch)
         _, _, idx = batch
         sample_idx.extend(idx.tolist())
 
@@ -1001,7 +1001,7 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
                                     collate_fn,
                                     src_process=dataset.sequence_encoder[dataset.src_lang],
                                     trg_process=dataset.sequence_encoder[dataset.trg_lang],
-                                    pad_index=pad_index,
+                                    pad_index=model.pad_index,
                                     device=device,
                                     has_trg=dataset.has_trg,
                                     is_train=dataset.split == "train",
@@ -1076,7 +1076,7 @@ def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
     
-    query_the_oracle(model, torch.device("cuda"), train_data, query_size=10, query_strategy='random', 
+    query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random', 
                      interactive=True, pool_size=0, batch_size=128, num_workers=4)
     
      # for training management, e.g. early stopping and model selection
