@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from joeynmt.constants import PAD_ID
+from constants import PAD_ID
 
 logger = logging.getLogger(__name__)
 

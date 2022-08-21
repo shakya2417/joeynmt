@@ -9,7 +9,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
-from joeynmt.helpers import ConfigurationError
+from helpers import ConfigurationError
 
 
 def orthogonal_rnn_init_(cell: nn.RNNBase, gain: float = 1.0) -> None:

@@ -16,12 +16,12 @@ from torch.utils.data import (
     SequentialSampler,
 )
 
-from joeynmt.batch import Batch
-from joeynmt.constants import PAD_ID
-from joeynmt.datasets import build_dataset
-from joeynmt.helpers import log_data_info
-from joeynmt.tokenizers import build_tokenizer
-from joeynmt.vocabulary import Vocabulary, build_vocab
+from batch import Batch
+from constants import PAD_ID
+from datasets import build_dataset
+from helpers import log_data_info
+from tokenizers import build_tokenizer
+from vocabulary import Vocabulary, build_vocab
 
 logger = logging.getLogger(__name__)
 CPU_DEVICE = torch.device("cpu")

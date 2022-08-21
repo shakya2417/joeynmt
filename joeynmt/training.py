@@ -11,7 +11,7 @@ import sys
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import numpy as np
 import torch
@@ -19,10 +19,10 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
 
-from joeynmt.batch import Batch
-from joeynmt.builders import build_gradient_clipper, build_optimizer, build_scheduler
-from joeynmt.data import load_data, make_data_iter
-from joeynmt.helpers import (
+from batch import Batch
+from builders import build_gradient_clipper, build_optimizer, build_scheduler
+from data import load_data, make_data_iter
+from helpers import (
     delete_ckpt,
     load_checkpoint,
     load_config,
@@ -35,8 +35,8 @@ from joeynmt.helpers import (
     symlink_update,
     write_list_to_file,
 )
-from joeynmt.model import Model, _DataParallel, build_model
-from joeynmt.prediction import predict, test
+from model import Model, _DataParallel, build_model
+from prediction import predict, test
 
 # for fp16 training
 try:
@@ -866,6 +866,58 @@ def train(cfg_file: str, skip_test: bool = False) -> None:
         )
     else:
         logger.info("Skipping test after training")
+
+
+def train_model(cfg_file: str, skip_test: bool = False) -> Any:
+    """
+    Main training function. After training, also test on test data if given.
+
+    :param cfg_file: path to configuration yaml file
+    :param skip_test: whether a test should be run or not after training
+    :return:
+        - model
+    """
+    # read config file
+    cfg = load_config(Path(cfg_file))
+
+    # make logger
+    model_dir = make_model_dir(
+        Path(cfg["training"]["model_dir"]),
+        overwrite=cfg["training"].get("overwrite", False),
+    )
+    joeynmt_version = make_logger(model_dir, mode="train")
+    if "joeynmt_version" in cfg:
+        assert str(joeynmt_version) == str(cfg["joeynmt_version"]), (
+            f"You are using JoeyNMT version {joeynmt_version}, "
+            f'but {cfg["joeynmt_version"]} is expected in the given config.')
+    # TODO: save version number in model checkpoints
+
+    # write all entries of config to the log
+    log_cfg(cfg)
+
+    # store copy of original training config in model dir
+    shutil.copy2(cfg_file, (model_dir / "config.yaml").as_posix())
+
+    # set the random seed
+    set_seed(seed=cfg["training"].get("random_seed", 42))
+
+    # load the data
+    src_vocab, trg_vocab, train_data, dev_data, test_data = load_data(
+        data_cfg=cfg["data"])
+
+    # store the vocabs and tokenizers
+    src_vocab.to_file(model_dir / "src_vocab.txt")
+    if hasattr(train_data.tokenizer[train_data.src_lang], "copy_cfg_file"):
+        train_data.tokenizer[train_data.src_lang].copy_cfg_file(model_dir)
+    trg_vocab.to_file(model_dir / "trg_vocab.txt")
+    if hasattr(train_data.tokenizer[train_data.trg_lang], "copy_cfg_file"):
+        train_data.tokenizer[train_data.trg_lang].copy_cfg_file(model_dir)
+
+    # build an encoder-decoder model
+    model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
+    
+    return model
+
 
 
 if __name__ == "__main__":

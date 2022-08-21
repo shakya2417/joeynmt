@@ -11,8 +11,8 @@ from typing import Dict
 import torch
 from torch import Tensor, nn
 
-from joeynmt.helpers import freeze_params
-from joeynmt.vocabulary import Vocabulary
+from helpers import freeze_params
+from vocabulary import Vocabulary
 
 logger = logging.getLogger(__name__)
 

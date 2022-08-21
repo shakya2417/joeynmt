@@ -9,15 +9,15 @@ import time
 from functools import partial
 from itertools import zip_longest
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from joeynmt.data import load_data, make_data_iter
-from joeynmt.datasets import build_dataset
-from joeynmt.helpers import (
+from data import load_data, make_data_iter
+from datasets import build_dataset
+from helpers import (
     expand_reverse_index,
     load_checkpoint,
     load_config,
@@ -29,11 +29,11 @@ from joeynmt.helpers import (
     store_attention_plots,
     write_list_to_file,
 )
-from joeynmt.metrics import bleu, chrf, sequence_accuracy, token_accuracy
-from joeynmt.model import Model, _DataParallel, build_model
-from joeynmt.search import search
-from joeynmt.tokenizers import build_tokenizer
-from joeynmt.vocabulary import build_vocab
+from metrics import bleu, chrf, sequence_accuracy, token_accuracy
+from model import Model, _DataParallel, build_model
+from search import search
+from tokenizers import build_tokenizer
+from vocabulary import build_vocab
 
 logger = logging.getLogger(__name__)
 
@@ -442,7 +442,8 @@ def translate(
     cfg_file: str,
     ckpt: str = None,
     output_path: str = None,
-) -> None:
+    input_str: str = None,
+) -> Any:
     """
     Interactive translation function.
     Loads model from checkpoint and translates either the stdin input or asks for
@@ -452,12 +453,13 @@ def translate(
     :param cfg_file: path to configuration file
     :param ckpt: path to checkpoint to load
     :param output_path: path to output file
+    :param input_str: input str
     """
 
     # pylint: disable=too-many-branches
     def _translate_data(test_data, cfg):
         """Translates given dataset, using parameters from outer scope."""
-        _, _, hypotheses, trg_tokens, trg_scores, _ = predict(
+        _, _, hypotheses, trg_tokens, trg_scores, att_scores = predict(
             model=model,
             data=test_data,
             compute_loss=False,
@@ -467,7 +469,7 @@ def translate(
             num_workers=num_workers,
             cfg=cfg,
         )
-        return hypotheses, trg_tokens, trg_scores
+        return hypotheses, trg_tokens, trg_scores, att_scores
 
     cfg = load_config(Path(cfg_file))
     # parse and validate cfg
@@ -521,7 +523,7 @@ def translate(
         # input stream given
         for line in sys.stdin.readlines():
             test_data.set_item(line.rstrip())
-        all_hypotheses, tokens, scores = _translate_data(test_data, test_cfg)
+        all_hypotheses, tokens, scores, _ = _translate_data(test_data, test_cfg)
         assert len(all_hypotheses) == len(test_data) * n_best
 
         if output_path is not None:
@@ -546,7 +548,35 @@ def translate(
             # print to stdout
             for hyp in all_hypotheses:
                 print(hyp)
+    elif input_str:
+        # enter if str is provided
+        n_best = test_cfg.get("n_best", 4)  # #############
+        beam_size = test_cfg.get("beam_size", 1)  # #############
+        return_prob = test_cfg.get("return_prob", "hyp")  # #############
 
+        test_cfg["n_best"] = 5
+        test_cfg["batch_size"] = 10  # CAUTION: this will raise an error if n_gpus > 1
+        test_cfg["batch_type"] = "sentence"
+        test_cfg["return_prob"] = "hyp"
+        np.set_printoptions(linewidth=sys.maxsize)  # for printing scores in stdout
+        test_data.set_item(input_str.rstrip())
+        hypotheses, tokens, scores, att_score = _translate_data(test_data, test_cfg)
+
+        print("JoeyNMT:")
+        for i, (hyp, token,
+                score) in enumerate(zip_longest(hypotheses, tokens, scores)):
+            assert hyp is not None, (i, hyp, token, score)
+            print(f"#{i + 1}: {hyp}")
+            if return_prob in ["hyp"]:
+                if beam_size > 1:  # beam search: sequence-level scores
+                    print(f"\ttokens: {token}\n\tsequence score: {score[0]}")
+                else:  # greedy: token-level scores
+                    assert len(token) == len(score), (token, score)
+                    print(f"\ttokens: {token}\n\tscores: {score}")
+
+        # reset cache
+        test_data.cache = {}
+        return hypotheses, tokens, scores, att_score
     else:
         # enter interactive mode
         test_cfg["batch_size"] = 1  # CAUTION: this will raise an error if n_gpus > 1
@@ -560,7 +590,7 @@ def translate(
 
                 # every line has to be made into dataset
                 test_data.set_item(src_input.rstrip())
-                hypotheses, tokens, scores = _translate_data(test_data, test_cfg)
+                hypotheses, tokens, scores, _ = _translate_data(test_data, test_cfg)
 
                 print("JoeyNMT:")
                 for i, (hyp, token,

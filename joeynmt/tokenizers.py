@@ -10,8 +10,8 @@ from typing import Dict, List
 import sentencepiece as sp
 from subword_nmt import apply_bpe
 
-from joeynmt.constants import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN
-from joeynmt.helpers import ConfigurationError, remove_extra_spaces, unicode_normalize
+from constants import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN
+from helpers import ConfigurationError, remove_extra_spaces, unicode_normalize
 
 logger = logging.getLogger(__name__)
 

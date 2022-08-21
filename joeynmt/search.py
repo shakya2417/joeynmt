@@ -9,10 +9,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from joeynmt.batch import Batch
-from joeynmt.decoders import RecurrentDecoder, TransformerDecoder
-from joeynmt.helpers import tile
-from joeynmt.model import Model
+from batch import Batch
+from decoders import RecurrentDecoder, TransformerDecoder
+from helpers import tile
+from model import Model
 
 __all__ = ["greedy", "beam_search", "search"]
 

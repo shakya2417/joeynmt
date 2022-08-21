@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Tuple, Union
 
 from torch.utils.data import Dataset
 
-from joeynmt.helpers import ConfigurationError, read_list_from_file
-from joeynmt.tokenizers import BasicTokenizer
+from helpers import ConfigurationError, read_list_from_file
+from tokenizers import BasicTokenizer
 
 logger = logging.getLogger(__name__)
 

@@ -11,13 +11,13 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from joeynmt.decoders import Decoder, RecurrentDecoder, TransformerDecoder
-from joeynmt.embeddings import Embeddings
-from joeynmt.encoders import Encoder, RecurrentEncoder, TransformerEncoder
-from joeynmt.helpers import ConfigurationError
-from joeynmt.initialization import initialize_model
-from joeynmt.loss import XentLoss
-from joeynmt.vocabulary import Vocabulary
+from decoders import Decoder, RecurrentDecoder, TransformerDecoder
+from embeddings import Embeddings
+from encoders import Encoder, RecurrentEncoder, TransformerEncoder
+from helpers import ConfigurationError
+from initialization import initialize_model
+from loss import XentLoss
+from vocabulary import Vocabulary
 
 logger = logging.getLogger(__name__)
 

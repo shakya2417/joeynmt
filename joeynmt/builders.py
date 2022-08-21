@@ -16,7 +16,7 @@ from torch.optim.lr_scheduler import (
     _LRScheduler,
 )
 
-from joeynmt.helpers import ConfigurationError
+from helpers import ConfigurationError
 
 logger = logging.getLogger(__name__)
 

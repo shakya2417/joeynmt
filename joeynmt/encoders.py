@@ -8,8 +8,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-from joeynmt.helpers import freeze_params
-from joeynmt.transformer_layers import PositionalEncoding, TransformerEncoderLayer
+from helpers import freeze_params
+from transformer_layers import PositionalEncoding, TransformerEncoderLayer
 
 
 class Encoder(nn.Module):

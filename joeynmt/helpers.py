@@ -24,11 +24,11 @@ from torch import Tensor, nn
 from torch.multiprocessing import cpu_count
 from torch.utils.tensorboard import SummaryWriter
 
-from joeynmt.plotting import plot_heatmap
+from plotting import plot_heatmap
 
 if TYPE_CHECKING:
-    from joeynmt.dataset import BaseDataset
-    from joeynmt.vocabulary import Vocabulary  # to avoid circular import
+    from dataset import BaseDataset
+    from vocabulary import Vocabulary  # to avoid circular import
 
 np.set_printoptions(linewidth=sys.maxsize)  # format for printing numpy array
 

@@ -7,10 +7,10 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
 
-from joeynmt.attention import BahdanauAttention, LuongAttention
-from joeynmt.encoders import Encoder
-from joeynmt.helpers import ConfigurationError, freeze_params, subsequent_mask
-from joeynmt.transformer_layers import PositionalEncoding, TransformerDecoderLayer
+from attention import BahdanauAttention, LuongAttention
+from encoders import Encoder
+from helpers import ConfigurationError, freeze_params, subsequent_mask
+from transformer_layers import PositionalEncoding, TransformerDecoderLayer
 
 
 class Decoder(nn.Module):

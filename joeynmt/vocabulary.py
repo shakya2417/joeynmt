@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from joeynmt.constants import (
+from constants import (
     BOS_ID,
     BOS_TOKEN,
     EOS_ID,
@@ -20,8 +20,8 @@ from joeynmt.constants import (
     UNK_ID,
     UNK_TOKEN,
 )
-from joeynmt.datasets import BaseDataset
-from joeynmt.helpers import flatten, read_list_from_file, write_list_to_file
+from datasets import BaseDataset
+from helpers import flatten, read_list_from_file, write_list_to_file
 
 logger = logging.getLogger(__name__)
 

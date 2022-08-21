@@ -1,8 +1,8 @@
 import argparse
 
-from joeynmt.prediction import test, translate
-from joeynmt.training import train
-
+from joeynmt.prediction import test, translate, predict
+from joeynmt.training import train, train_model
+from joeynmt.design import ActiveLearningLoop
 
 def main():
     ap = argparse.ArgumentParser("Joey NMT")
@@ -56,6 +56,19 @@ def main():
             ckpt=args.ckpt,
             output_path=args.output_path,
         )
+    elif args.mode == "active_learning":
+        methods = [{'model': train_model(cfg_file=args.config_path, name='LogClass-random'), 'acq_func': 'random'},
+                {'model': train_model(cfg_file=args.config_path, name='LogClass-entropy'), 'acq_func': 'entropy'},
+                {'model': train_model(cfg_file=args.config_path, name='LogClass-margin_samp'), 'acq_func': 'margin_sampling'},
+                {'model': train_model(cfg_file=args.config_path, name='LogClass-least_conf'), 'acq_func': 'least_confidence'}, ]
+                
+        exp_loop = ActiveLearningLoop("main")
+        exp_loop.execute(dataset, methods,
+                     train_perc=0.2,
+                     test_perc=0.2,
+                     label_block_size=0.02,
+                     nb_runs=10)
+        exp_loop.generate_report(plot_spread=True)
     else:
         raise ValueError("Unknown mode")
 
