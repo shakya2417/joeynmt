@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 
 from helpers import ConfigurationError, read_list_from_file
 from tokenizers import BasicTokenizer
-
+import numpy as np
 logger = logging.getLogger(__name__)
 
 
@@ -220,6 +220,137 @@ class PlaintextDataset(BaseDataset):
             return len(self.idx_map)
         return self._initial_len
 
+class PlaintextDatasetAC(BaseDataset):
+    """
+    PlaintextDatasetAC which stores plain text pairs.
+    - used for text file data in the format of one sentence per line.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        src_lang: str,
+        trg_lang: str,
+        split: int = "train",
+        has_trg: bool = True,
+        tokenizer: Dict[str, BasicTokenizer] = None,
+        sequence_encoder: Dict[str, Callable] = None,
+        random_subset: int = -1,
+        **kwargs,
+    ):
+        super().__init__(
+            path=path,
+            src_lang=src_lang,
+            trg_lang=trg_lang,
+            split=split,
+            has_trg=has_trg,
+            tokenizer=tokenizer,
+            sequence_encoder=sequence_encoder,
+            random_subset=random_subset,
+        )
+
+        # load data
+        self.data = self.load_data(path, **kwargs)
+        self._initial_len = len(self.data[self.src_lang])
+
+        # for random subsampling
+        self.idx_map = []
+        self.unlabeled_mask = np.ones(self._initial_len)
+        # image_filenames = []
+        # for (dirpath, dirnames, filenames) in os.walk(dir_path):
+        #     image_filenames += [os.path.join(dirpath, file) for file in filenames if is_image(file)]
+        # self.image_filenames = image_filenames 
+
+    def load_data(self, path: str, **kwargs) -> Any:
+
+        def _pre_process(seq, lang):
+            if self.tokenizer[lang] is not None:
+                seq = [self.tokenizer[lang].pre_process(s) for s in seq if len(s) > 0]
+            return seq
+
+        path = Path(path)
+        src_file = path.with_suffix(f"{path.suffix}.{self.src_lang}")
+        assert src_file.is_file(), f"{src_file} not found. Abort."
+
+        src_list = read_list_from_file(src_file)
+        data = {self.src_lang: _pre_process(src_list, self.src_lang)}
+
+        if self.has_trg:
+            trg_file = path.with_suffix(f"{path.suffix}.{self.trg_lang}")
+            assert trg_file.is_file(), f"{trg_file} not found. Abort."
+
+            trg_list = read_list_from_file(trg_file)
+            data[self.trg_lang] = _pre_process(trg_list, self.trg_lang)
+            assert len(src_list) == len(trg_list)
+        return data
+
+    def sample_random_subset(self, seed: int = 42) -> None:
+        super().sample_random_subset(seed)  # check validity
+
+        random.seed(seed)  # resample every epoch: seed += epoch_no
+        self.idx_map = list(random.sample(range(self._initial_len), self.random_subset))
+
+    def reset_random_subset(self):
+        self.idx_map = []
+
+    def get_item(self, idx: int, lang: str, is_train: bool = None) -> List[str]:
+        line = self._look_up_item(idx, lang)
+        is_train = self.split == "train" if is_train is None else is_train
+        item = self.tokenizer[lang](line, is_train=is_train)
+        return item
+
+    def _look_up_item(self, idx: int, lang: str) -> str:
+        try:
+            if len(self.idx_map) > 0:
+                idx = self.idx_map[idx]
+            line = self.data[lang][idx]
+            return line
+        except Exception as e:
+            print(idx, self._initial_len)
+            raise Exception from e
+
+    def get_list(self,
+                 lang: str,
+                 tokenized: bool = False) -> Union[List[str], List[List[str]]]:
+        """
+        Return list of preprocessed sentences in the given language.
+        (not length-filtered, no bpe-dropout)
+        """
+        item_list = []
+        for idx in range(self.__len__()):
+            item = self._look_up_item(idx, lang)
+            if tokenized:
+                item = self.tokenizer[lang](self._look_up_item(idx, lang),
+                                            is_train=False)
+            item_list.append(item)
+        return item_list
+
+    def __len__(self) -> int:
+        if len(self.idx_map) > 0:
+            return len(self.idx_map)
+        return self._initial_len
+    
+    # Display the image [idx] and its filename
+    def display(self, idx,lang):
+        img_name = get_item(idx,lang=lang)
+        print(img_name)
+        # img=mpimg.imread(img_name)
+        # imgplot = plt.imshow(img)
+        # plt.show()
+        return
+    
+    # Set the label of image [idx] to 'new_label'
+    def update_label(self, idx, new_label):
+        # self.labels[idx] = new_label
+        self.data[lang][idx] = new_label
+        self.unlabeled_mask[idx] = 0
+        return
+    
+    # Set the label of image [idx] to that read from its filename
+    def label_from_file(self, idx):
+        self.data[lang][idx] = self.data[lang][idx]
+        self.unlabeled_mask[idx] = 0
+        return
 
 class TsvDataset(BaseDataset):
     """
@@ -554,6 +685,21 @@ def build_dataset(
             random_subset=random_subset,
             **kwargs,
         )
+    elif dataset_type == "plain_ac":
+        if not Path(path).with_suffix(f"{Path(path).suffix}.{trg_lang}").is_file():
+            # no target is given -> create dataset from src only
+            has_trg = False
+        dataset = PlaintextDatasetAC(
+            path=path,
+            src_lang=src_lang,
+            trg_lang=trg_lang,
+            split=split,
+            has_trg=has_trg,
+            tokenizer=tokenizer,
+            sequence_encoder=sequence_encoder,
+            random_subset=random_subset,
+            **kwargs,
+        ) 
     elif dataset_type == "tsv":
         dataset = TsvDataset(
             path=path,

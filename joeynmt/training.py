@@ -12,9 +12,9 @@ import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, List, Tuple
-
-import numpy as np
 import torch
+import numpy as np
+
 from torch import Tensor
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
@@ -37,6 +37,19 @@ from helpers import (
 )
 from model import Model, _DataParallel, build_model
 from prediction import predict, test
+import torch
+import torch.nn.functional as F
+from torch.utils.data import (
+    BatchSampler,
+    DataLoader,
+    Dataset,
+    RandomSampler,
+    Sampler,
+    SequentialSampler,
+    SubsetRandomSampler
+)
+from data import collate_fn
+from functools import partial
 
 # for fp16 training
 try:
@@ -867,8 +880,155 @@ def train(cfg_file: str, skip_test: bool = False) -> None:
     else:
         logger.info("Skipping test after training")
 
+        
+        
+        
 
-def train_model(cfg_file: str, skip_test: bool = False) -> Any:
+'''
+Each query strategy below returns a list of len=query_size with indices of 
+samples that are to be queried.
+
+Arguments:
+- model (torch.nn.Module): not needed for `random_query`
+- device (torch.device): not needed for `random_query`
+- dataloader (torch.utils.data.DataLoader)
+- query_size (int): number of samples to be queried for labels (default=10)
+
+'''
+def random_query(data_loader, query_size=10):
+    
+    sample_idx = []
+    
+    # Because the data has already been shuffled inside the data loader,
+    # we can simply return the `query_size` first samples from it
+    for batch in data_loader:
+        
+        _, _, idx = batch
+        sample_idx.extend(idx.tolist())
+
+        if len(sample_idx) >= query_size:
+            break
+    
+    return sample_idx[0:query_size]
+
+def least_confidence_query(model, device, data_loader, query_size=10):
+
+    confidences = []
+    indices = []
+    
+    model.eval()
+    
+    with torch.no_grad():
+        for batch in data_loader:
+        
+            data, _, idx = batch
+            logits = model(data.to(device))
+            probabilities = F.softmax(logits, dim=1)
+            
+            # Keep only the top class confidence for each sample
+            most_probable = torch.max(probabilities, dim=1)[0]
+            confidences.extend(most_probable.cpu().tolist())
+            indices.extend(idx.tolist())
+            
+    conf = np.asarray(confidences)
+    ind = np.asarray(indices)
+    sorted_pool = np.argsort(conf)
+    # Return the indices corresponding to the lowest `query_size` confidences
+    return ind[sorted_pool][0:query_size]
+
+def margin_query(model, device, data_loader, query_size=10):
+    
+    margins = []
+    indices = []
+    
+    model.eval()
+    
+    with torch.no_grad():
+        for batch in data_loader:
+        
+            data, _, idx = batch
+            logits = model(data.to(device))
+            probabilities = F.softmax(logits, dim=1)
+            
+            # Select the top two class confidences for each sample
+            toptwo = torch.topk(probabilities, 2, dim=1)[0]
+            
+            # Compute the margins = differences between the two top confidences
+            differences = toptwo[:,0]-toptwo[:,1]
+            margins.extend(torch.abs(differences).cpu().tolist())
+            indices.extend(idx.tolist())
+
+    margin = np.asarray(margins)
+    index = np.asarray(indices)
+    sorted_pool = np.argsort(margin)
+    # Return the indices corresponding to the lowest `query_size` margins
+    return index[sorted_pool][0:query_size]
+
+
+def query_the_oracle(model, device, dataset, query_size=10, query_strategy='random', 
+                     interactive=True, pool_size=0, batch_size=128, num_workers=4):
+    
+    unlabeled_idx = np.nonzero(dataset.unlabeled_mask)[0]
+    
+    # Select a pool of samples to query from
+    if pool_size > 0:    
+        pool_idx = random.sample(range(1, len(unlabeled_idx)), pool_size)
+        pool_loader = DataLoader(
+                                dataset,
+                                batch_size=batch_size,
+                                sampler=SubsetRandomSampler(unlabeled_idx[pool_idx]),
+                                collate_fn=partial(
+                                    collate_fn,
+                                    src_process=dataset.sequence_encoder[dataset.src_lang],
+                                    trg_process=dataset.sequence_encoder[dataset.trg_lang],
+                                    pad_index=pad_index,
+                                    device=device,
+                                    has_trg=dataset.has_trg,
+                                    is_train=dataset.split == "train",
+                                ),
+                                num_workers=num_workers,
+                            )
+        # pool_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers,
+        #                                       sampler=SubsetRandomSampler(unlabeled_idx[pool_idx]))
+    else:
+        # pool_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers,
+        #                                       sampler=SubsetRandomSampler(unlabeled_idx))
+        pool_loader = DataLoader(
+                                dataset,
+                                batch_size=batch_size,
+                                sampler=SubsetRandomSampler(unlabeled_idx),
+                                collate_fn=partial(
+                                    collate_fn,
+                                    src_process=dataset.sequence_encoder[dataset.src_lang],
+                                    trg_process=dataset.sequence_encoder[dataset.trg_lang],
+                                    pad_index=pad_index,
+                                    device=device,
+                                    has_trg=dataset.has_trg,
+                                    is_train=dataset.split == "train",
+                                ),
+                                num_workers=num_workers,
+                            )
+       
+    if query_strategy == 'margin':
+        sample_idx = margin_query(model, device, pool_loader, query_size)
+    elif query_strategy == 'least_confidence':
+        sample_idx = least_confidence_query(model, device, pool_loader, query_size)
+    else:
+        sample_idx = random_query(pool_loader, query_size)
+    
+    # Query the samples, one at a time
+    for sample in sample_idx:
+        
+        if interactive:
+            dataset.display(sample)
+            print("What is the translation for this sentence?")
+            new_label = int(input())
+            dataset.update_label(sample, new_label)
+            
+        else:
+            dataset.label_from_file(sample)
+
+def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     """
     Main training function. After training, also test on test data if given.
 
@@ -916,6 +1076,15 @@ def train_model(cfg_file: str, skip_test: bool = False) -> Any:
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
     
+    query_the_oracle(model, torch.device("cuda"), train_data, query_size=10, query_strategy='random', 
+                     interactive=True, pool_size=0, batch_size=128, num_workers=4)
+    
+     # for training management, e.g. early stopping and model selection
+    trainer = TrainManager(model=model, cfg=cfg)
+
+    # train the model
+    trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
+    
     return model
 
 
@@ -929,4 +1098,6 @@ if __name__ == "__main__":
         help="Training configuration file (yaml).",
     )
     args = parser.parse_args()
-    train(cfg_file=args.config)
+    cfg_file = "/home/ubuntu/joeynmt_kriti/test/data/models/v1_enhi_25_transformer_23.04bleu/enhi_transformer_t1/config.yaml"
+    ckpt = "/home/ubuntu/joeynmt_kriti/test/data/models/v1_enhi_25_transformer_23.04bleu/enhi_transformer_t1/81000.ckpt"
+    train_model_ac(cfg_file=args.config)

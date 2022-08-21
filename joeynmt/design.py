@@ -296,7 +296,7 @@ class ActiveLearningLoop(object):
 
         for index, row in df.iterrows():
             print(row['clean_en_tok'])
-            hypotheses, tokens, scores, att_score = translate(cfg_file,ckpt,output_path=None,input_str=row['clean_en_tok'])
+            hypotheses, tokens, scores, _ = translate(cfg_file,ckpt,output_path=None,input_str=row['clean_en_tok'])
             print(scores, att_score)
 
 
