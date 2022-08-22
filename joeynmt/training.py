@@ -48,7 +48,7 @@ from torch.utils.data import (
     SequentialSampler,
     SubsetRandomSampler
 )
-from data import collate_fn
+from data import collate_fn,SentenceBatchSampler
 from functools import partial
 
 # for fp16 training
@@ -901,10 +901,13 @@ def random_query(data_loader, query_size=10):
     
     # Because the data has already been shuffled inside the data loader,
     # we can simply return the `query_size` first samples from it
-    for batch in data_loader:
-        print(batch)
-        _, _, idx = batch
-        sample_idx.extend(idx.tolist())
+    for idx, batch in enumerate(data_loader):
+        
+        # _,_,_,_,_,_,_,_ = batch
+        idx_ = np.arange(batch.src.shape[0])
+        # _, _, idx = batch
+        # sample_idx.extend(idx.tolist())
+        sample_idx.extend(idx_.tolist())
 
         if len(sample_idx) >= query_size:
             break
@@ -995,8 +998,11 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
         #                                       sampler=SubsetRandomSampler(unlabeled_idx))
         pool_loader = DataLoader(
                                 dataset,
-                                batch_size=batch_size,
-                                sampler=SubsetRandomSampler(unlabeled_idx),
+                                # batch_size=batch_size,
+                                batch_sampler = SentenceBatchSampler(RandomSampler(dataset),
+                                             batch_size=batch_size,
+                                             drop_last=False),
+                                # sampler=SubsetRandomSampler(unlabeled_idx),
                                 collate_fn=partial(
                                     collate_fn,
                                     src_process=dataset.sequence_encoder[dataset.src_lang],
@@ -1020,7 +1026,7 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
     for sample in sample_idx:
         
         if interactive:
-            dataset.display(sample)
+            dataset.display(sample,)
             print("What is the translation for this sentence?")
             new_label = int(input())
             dataset.update_label(sample, new_label)
