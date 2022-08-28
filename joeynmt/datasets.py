@@ -337,7 +337,7 @@ class PlaintextDatasetAC(BaseDataset):
         # img=mpimg.imread(img_name)
         # imgplot = plt.imshow(img)
         # plt.show()
-        return
+        return img_name
     
     # Set the label of image [idx] to 'new_label'
     def update_label(self, idx, new_label):

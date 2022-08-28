@@ -23,6 +23,7 @@ from batch import Batch
 from builders import build_gradient_clipper, build_optimizer, build_scheduler
 from data import load_data, make_data_iter
 from helpers import (
+    expand_reverse_index,
     delete_ckpt,
     load_checkpoint,
     load_config,
@@ -30,13 +31,14 @@ from helpers import (
     make_logger,
     make_model_dir,
     parse_train_args,
+    parse_test_args,
     set_seed,
     store_attention_plots,
     symlink_update,
     write_list_to_file,
 )
 from model import Model, _DataParallel, build_model
-from prediction import predict, test
+from prediction import predict, test, translate
 import torch
 import torch.nn.functional as F
 from torch.utils.data import (
@@ -50,6 +52,7 @@ from torch.utils.data import (
 )
 from data import collate_fn,SentenceBatchSampler
 from functools import partial
+from search import search
 
 # for fp16 training
 try:
@@ -895,6 +898,7 @@ Arguments:
 - query_size (int): number of samples to be queried for labels (default=10)
 
 '''
+
 def random_query(data_loader, query_size=10):
     
     sample_idx = []
@@ -938,38 +942,54 @@ def least_confidence_query(model, device, data_loader, query_size=10):
     sorted_pool = np.argsort(conf)
     # Return the indices corresponding to the lowest `query_size` confidences
     return ind[sorted_pool][0:query_size]
+    
 
-def margin_query(model, device, data_loader, query_size=10):
+def margin_query(model, device, data_loader, query_size=10,cfg_file=None,data=None,ckpt=None):
     
     margins = []
     indices = []
     
-    model.eval()
-    
-    with torch.no_grad():
-        for batch in data_loader:
-        
-            data, _, idx = batch
-            logits = model(data.to(device))
-            probabilities = F.softmax(logits, dim=1)
+   
+    for batch in data_loader:
+        batch_result = generate_data_d(batch,data,cfg_file,ckpt)
+#         total_nseqs += batch.nseqs  # number of sentences in the current batch
+        break
+
+    probabilities = torch.as_tensor(np.vstack(list(batch_result.values())))
             
-            # Select the top two class confidences for each sample
-            toptwo = torch.topk(probabilities, 2, dim=1)[0]
-            
-            # Compute the margins = differences between the two top confidences
-            differences = toptwo[:,0]-toptwo[:,1]
-            margins.extend(torch.abs(differences).cpu().tolist())
-            indices.extend(idx.tolist())
+       
+    # Select the top two class confidences for each sample
+    toptwo = torch.topk(probabilities, 2,dim=1)[0]
+
+    # Compute the margins = differences between the two top confidences
+    differences = toptwo[:,0]-toptwo[:,1]
+    margins.extend(torch.abs(differences).cpu().tolist())
+    indices.extend(np.hstack(list(batch_result.keys())))
 
     margin = np.asarray(margins)
     index = np.asarray(indices)
     sorted_pool = np.argsort(margin)
     # Return the indices corresponding to the lowest `query_size` margins
+    print(index[sorted_pool][0:query_size])
     return index[sorted_pool][0:query_size]
 
 
+def generate_data_d(batch,data,cfg_file,ckpt):
+    idx_ = np.arange(batch.src.shape[0])
+    # _, _, idx = batch
+    # sample_idx.extend(idx.tolist())
+    sent_list = {}
+    for sent_id in idx_:
+        sent = " ".join(data.display(sent_id))
+        print(sent)
+        hypotheses, tokens, scores, _ = translate(cfg_file,ckpt,output_path=None,input_str=sent)
+        print(scores)
+        sent_list[sent_id] = [i[0] for i in scores]
+    print(sent_list)
+    return sent_list
+
 def query_the_oracle(model, device, dataset, query_size=10, query_strategy='random', 
-                     interactive=True, pool_size=0, batch_size=128, num_workers=4):
+                     interactive=True, pool_size=0, batch_size=12, num_workers=4, cfg_file=None,ckpt=None):
     
     unlabeled_idx = np.nonzero(dataset.unlabeled_mask)[0]
     
@@ -1016,7 +1036,7 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
                             )
        
     if query_strategy == 'margin':
-        sample_idx = margin_query(model, device, pool_loader, query_size)
+        sample_idx = margin_query(model, device, pool_loader, query_size,cfg_file=cfg_file,data=dataset)
     elif query_strategy == 'least_confidence':
         sample_idx = least_confidence_query(model, device, pool_loader, query_size)
     else:
@@ -1028,7 +1048,7 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
         if interactive:
             dataset.display(sample,)
             print("What is the translation for this sentence?")
-            new_label = int(input())
+            new_label = input()
             dataset.update_label(sample, new_label)
             
         else:
@@ -1082,20 +1102,43 @@ def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
     
-    query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random', 
-                     interactive=True, pool_size=0, batch_size=128, num_workers=4)
+    # query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random', 
+    #                  interactive=True, pool_size=0, batch_size=128, num_workers=4, cfg_file=cfg_file)
+    
     
      # for training management, e.g. early stopping and model selection
     trainer = TrainManager(model=model, cfg=cfg)
+    query_the_oracle(model, trainer.device, train_data, query_size=5, query_strategy='margin', interactive=True, pool_size=0, cfg_file=cfg_file,ckpt=ckpt)
 
     # train the model
     trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
+    
+    for query in range(num_queries):
+    
+        # Query the oracle for more labels
+        query_the_oracle(classifier, device, train_set, query_size=5, query_strategy='margin', interactive=True, pool_size=0)
+
+        # Train the model on the data that has been labeled so far:
+        labeled_idx = np.where(train_set.unlabeled_mask == 0)[0]
+        labeled_loader = DataLoader(train_set, batch_size=batch_size, num_workers=10, 
+                                    sampler=SubsetRandomSampler(labeled_idx))
+        previous_test_acc = 0
+        current_test_acc = 1
+        while current_test_acc > previous_test_acc:
+            previous_test_acc = current_test_acc
+            train_loss = train(classifier, device, labeled_loader, optimizer, criterion)
+            _, current_test_acc = test(classifier, device, test_loader, criterion)
+
+
+        # Test the model:
+        test(classifier, device, test_loader, criterion, display=True)
     
     return model
 
 
 
 if __name__ == "__main__":
+    torch.multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser("Joey-NMT")
     parser.add_argument(
         "config",
@@ -1104,6 +1147,6 @@ if __name__ == "__main__":
         help="Training configuration file (yaml).",
     )
     args = parser.parse_args()
-    cfg_file = "/home/ubuntu/joeynmt_kriti/test/data/models/v1_enhi_25_transformer_23.04bleu/enhi_transformer_t1/config.yaml"
+    # cfg_file = "/home/ubuntu/joeynmt_kriti/test/data/models/v1_enhi_25_transformer_23.04bleu/enhi_transformer_t1/config.yaml"
     ckpt = "/home/ubuntu/joeynmt_kriti/test/data/models/v1_enhi_25_transformer_23.04bleu/enhi_transformer_t1/81000.ckpt"
     train_model_ac(cfg_file=args.config)

@@ -457,12 +457,12 @@ def translate(
     """
 
     # pylint: disable=too-many-branches
-    def _translate_data(test_data, cfg):
+    def _translate_data(test_data, cfg, compute_loss=False):
         """Translates given dataset, using parameters from outer scope."""
         _, _, hypotheses, trg_tokens, trg_scores, att_scores = predict(
             model=model,
             data=test_data,
-            compute_loss=False,
+            compute_loss=compute_loss,
             device=device,
             n_gpu=n_gpu,
             normalization="none",
@@ -555,24 +555,24 @@ def translate(
         return_prob = test_cfg.get("return_prob", "hyp")  # #############
 
         test_cfg["n_best"] = 5
-        test_cfg["batch_size"] = 10  # CAUTION: this will raise an error if n_gpus > 1
+        # test_cfg["batch_size"] = 10  # CAUTION: this will raise an error if n_gpus > 1
         test_cfg["batch_type"] = "sentence"
         test_cfg["return_prob"] = "hyp"
         np.set_printoptions(linewidth=sys.maxsize)  # for printing scores in stdout
-        test_data.set_item(input_str.rstrip())
+        test_data.set_item(input_str)
         hypotheses, tokens, scores, att_score = _translate_data(test_data, test_cfg)
 
-        print("JoeyNMT:")
-        for i, (hyp, token,
-                score) in enumerate(zip_longest(hypotheses, tokens, scores)):
-            assert hyp is not None, (i, hyp, token, score)
-            print(f"#{i + 1}: {hyp}")
-            if return_prob in ["hyp"]:
-                if beam_size > 1:  # beam search: sequence-level scores
-                    print(f"\ttokens: {token}\n\tsequence score: {score[0]}")
-                else:  # greedy: token-level scores
-                    assert len(token) == len(score), (token, score)
-                    print(f"\ttokens: {token}\n\tscores: {score}")
+        # print("JoeyNMT:")
+        # for i, (hyp, token,
+        #         score) in enumerate(zip_longest(hypotheses, tokens, scores)):
+        #     assert hyp is not None, (i, hyp, token, score)
+        #     print(f"#{i + 1}: {hyp}")
+        #     if return_prob in ["hyp"]:
+        #         if beam_size > 1:  # beam search: sequence-level scores
+        #             print(f"\ttokens: {token}\n\tsequence score: {score[0]}")
+        #         else:  # greedy: token-level scores
+        #             assert len(token) == len(score), (token, score)
+        #             print(f"\ttokens: {token}\n\tscores: {score}")
 
         # reset cache
         test_data.cache = {}
