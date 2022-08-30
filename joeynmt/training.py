@@ -920,22 +920,23 @@ def random_query(data_loader, query_size=10):
 
 def least_confidence_query(model, device, data_loader, query_size=10):
 
-    confidences = []
+    margins = []
     indices = []
     
-    model.eval()
-    
-    with torch.no_grad():
-        for batch in data_loader:
-        
-            data, _, idx = batch
-            logits = model(data.to(device))
-            probabilities = F.softmax(logits, dim=1)
+   
+    for batch in data_loader:
+        batch_result = generate_data_d(batch,data,cfg_file,ckpt)
+#         total_nseqs += batch.nseqs  # number of sentences in the current batch
+        break
+
+    probabilities = torch.as_tensor(np.vstack(list(batch_result.values())))
             
-            # Keep only the top class confidence for each sample
-            most_probable = torch.max(probabilities, dim=1)[0]
-            confidences.extend(most_probable.cpu().tolist())
-            indices.extend(idx.tolist())
+       
+
+    # Keep only the top class confidence for each sample
+    most_probable = torch.max(probabilities, dim=1)[0]
+    confidences.extend(most_probable.cpu().tolist())
+    indices.extend(np.hstack(list(batch_result.keys())))
             
     conf = np.asarray(confidences)
     ind = np.asarray(indices)
