@@ -1103,38 +1103,77 @@ def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
     
-    # query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random', 
-    #                  interactive=True, pool_size=0, batch_size=128, num_workers=4, cfg_file=cfg_file)
+    query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random',
+                     interactive=True, pool_size=0, batch_size=128, num_workers=4, cfg_file=cfg_file)
     
     
      # for training management, e.g. early stopping and model selection
     trainer = TrainManager(model=model, cfg=cfg)
-    query_the_oracle(model, trainer.device, train_data, query_size=5, query_strategy='margin', interactive=True, pool_size=0, cfg_file=cfg_file,ckpt=ckpt)
+
 
     # train the model
     trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
-    
+    num_queries = 3
     for query in range(num_queries):
     
         # Query the oracle for more labels
-        query_the_oracle(classifier, device, train_set, query_size=5, query_strategy='margin', interactive=True, pool_size=0)
+        query_the_oracle(model, trainer.device, train_data, query_size=5, query_strategy='margin', interactive=True, pool_size=0, cfg_file=cfg_file,ckpt=ckpt)
 
         # Train the model on the data that has been labeled so far:
-        labeled_idx = np.where(train_set.unlabeled_mask == 0)[0]
-        labeled_loader = DataLoader(train_set, batch_size=batch_size, num_workers=10, 
-                                    sampler=SubsetRandomSampler(labeled_idx))
-        previous_test_acc = 0
-        current_test_acc = 1
-        while current_test_acc > previous_test_acc:
-            previous_test_acc = current_test_acc
-            train_loss = train(classifier, device, labeled_loader, optimizer, criterion)
-            _, current_test_acc = test(classifier, device, test_loader, criterion)
+        labeled_idx = np.where(train_data.unlabeled_mask == 0)[0]
+        # labeled_loader = DataLoader(train_set, batch_size=batch_size, num_workers=10,
+        #                             sampler=SubsetRandomSampler(labeled_idx))
+        labeled_loader = DataLoader(
+                                train_data,
+                                # batch_size=batch_size,
+                                batch_sampler = SentenceBatchSampler(RandomSampler(train_data),
+                                             batch_size=batch_size,
+                                             drop_last=False),
+                                # sampler=SubsetRandomSampler(unlabeled_idx),
+                                collate_fn=partial(
+                                    collate_fn,
+                                    src_process=train_data.sequence_encoder[train_data.src_lang],
+                                    trg_process=train_data.sequence_encoder[train_data.trg_lang],
+                                    pad_index=model.pad_index,
+                                    device=device,
+                                    has_trg=train_data.has_trg,
+                                    is_train=train_data.split == "train",
+                                ),
+                                num_workers=num_workers,
+                            )
+        # previous_test_acc = 0
+        # current_test_acc = 1
+        # while current_test_acc > previous_test_acc:
+        #     previous_test_acc = current_test_acc
+        #     train_loss = train(classifier, device, labeled_loader, optimizer, criterion)
+        #     _, current_test_acc = test(classifier, device, test_loader, criterion)
+        # train the model
+        trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
+
+        if not skip_test:
+            # predict with the best model on validation and test
+            # (if test data is available)
+
+            ckpt = model_dir / f"{trainer.stats.best_ckpt_iter}.ckpt"
+            output_path = model_dir / f"{trainer.stats.best_ckpt_iter:08d}.hyps"
+
+            datasets_to_test = {
+                "dev": dev_data,
+                "test": test_data,
+                "src_vocab": src_vocab,
+                "trg_vocab": trg_vocab,
+            }
+            test(
+                cfg_file,
+                ckpt=ckpt.as_posix(),
+                output_path=output_path.as_posix(),
+                datasets=datasets_to_test,
+            )
 
 
         # Test the model:
-        test(classifier, device, test_loader, criterion, display=True)
-    
-    return model
+        # test(classifier, device, test_loader, criterion, display=True)
+
 
 
 
