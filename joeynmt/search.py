@@ -4,6 +4,7 @@ Search module
 """
 from typing import List, Tuple
 
+import copy
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -274,6 +275,7 @@ def transformer_greedy(
     output = ys[:, 1:].detach().cpu().numpy()
     scores = yv[:, 1:].detach().cpu().numpy() if return_prob else None
     attention = yt[:, 1:, :].detach().cpu().numpy() if return_attention else None
+    output={'joeynmt':output,'batch_results':None}
     return output, scores, attention
 
 
@@ -350,7 +352,6 @@ def beam_search(
             hidden = (h.permute(1, 0, 2), c.permute(1, 0, 2))
         else:
             hidden = hidden.permute(1, 0, 2)
-
     # `encoder_output` shape: (batch_size * beam_size, src_len, enc_hidden_size)
     encoder_output = tile(encoder_output.contiguous(), beam_size, dim=0)
     # `src_mask` shape: (batch_size * beam_size, 1, src_len)
@@ -641,7 +642,23 @@ def beam_search(
             for k, i in enumerate(h):
                 filled[j, k] = i
         return filled
-
+    def detach_from_device(results):
+        al_results=copy.deepcopy(results)
+        for key, value in al_results.items():
+            sen=[]
+            for batch in value: #batch
+                #n_best
+                n_top=[]
+                for best in batch:
+                    n_top.append(best.cpu().numpy())
+                sen.append(n_top)
+            
+            al_results[key]=sen
+        return al_results
+    
+    print('***************** shape are ************')
+    print('predictions',len(results['predictions']),len(results['predictions'][0]))
+    print('scores',len(results['scores']),len(results['scores'][0]))
     # from results to stacked outputs
     # `final_outputs`: shape (batch_size * n_best, hyp_len)
     final_outputs = pad_and_stack_hyps(
@@ -651,6 +668,8 @@ def beam_search(
     # `scores`: shape (batch_size * n_best, 1)
     scores = (np.array([[u.item()] for r in results["scores"]
                         for u in r]) if return_prob else None)
+
+    final_outputs={'joeynmt':final_outputs,'batch_results':detach_from_device(results)}
     return final_outputs, scores, None
 
 
@@ -713,7 +732,6 @@ def search(
             n_best=n_best,
             **kwargs,
         )
-
     return stacked_output, stacked_scores, stacked_attention_scores
 
 
