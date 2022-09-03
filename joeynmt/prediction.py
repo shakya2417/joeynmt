@@ -108,7 +108,7 @@ def predict(
     # cause an out-of-memory error.
     # if batch_size > beam_size:
     #     batch_size //= beam_size
-
+    print('*****************',eval_batch_size,eval_batch_type,model.pad_index)
     valid_iter = make_data_iter(
         dataset=data,
         batch_size=eval_batch_size,
@@ -135,12 +135,12 @@ def predict(
 
     gen_start_time = time.time()
     for batch in valid_iter:
+        print("@@@@@@@@@@@@@@@@@@",batch.src.shape,batch.src_mask.shape)
         total_nseqs += batch.nseqs  # number of sentences in the current batch
 
         # sort batch now by src length and keep track of order
         reverse_index = batch.sort_by_src_length()
         sort_reverse_index = expand_reverse_index(reverse_index, n_best)
-
         # run as during training to get validation loss (e.g. xent)
         if compute_loss and batch.has_trg:
             assert model.loss_function is not None
@@ -177,8 +177,12 @@ def predict(
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
             )
+            ## unpacking
+            batch_results=output['batch_results']
+            output=output['joeynmt']
 
         # sort outputs back to original order
+        #import ipdb; ipdb.set_trace()
         all_outputs.extend(output[sort_reverse_index])  # either hyp or ref
         valid_attention_scores.extend(attention_scores[sort_reverse_index]
                                       if attention_scores is not None else [])
@@ -293,6 +297,7 @@ def predict(
         decoded_valid,
         valid_sequence_scores,
         valid_attention_scores,
+        batch_results
     )
 
 
@@ -455,11 +460,10 @@ def translate(
     :param output_path: path to output file
     :param input_str: input str
     """
-
     # pylint: disable=too-many-branches
     def _translate_data(test_data, cfg, compute_loss=False):
         """Translates given dataset, using parameters from outer scope."""
-        _, _, hypotheses, trg_tokens, trg_scores, att_scores = predict(
+        _, _, hypotheses, trg_tokens, trg_scores, att_scores, batch_results = predict(
             model=model,
             data=test_data,
             compute_loss=compute_loss,
@@ -469,7 +473,7 @@ def translate(
             num_workers=num_workers,
             cfg=cfg,
         )
-        return hypotheses, trg_tokens, trg_scores, att_scores
+        return hypotheses, trg_tokens, trg_scores, att_scores, batch_results
 
     cfg = load_config(Path(cfg_file))
     # parse and validate cfg
@@ -523,7 +527,7 @@ def translate(
         # input stream given
         for line in sys.stdin.readlines():
             test_data.set_item(line.rstrip())
-        all_hypotheses, tokens, scores, _ = _translate_data(test_data, test_cfg)
+        all_hypotheses, tokens, scores, _, batch_results = _translate_data(test_data, test_cfg)
         assert len(all_hypotheses) == len(test_data) * n_best
 
         if output_path is not None:
@@ -559,8 +563,13 @@ def translate(
         test_cfg["batch_type"] = "sentence"
         test_cfg["return_prob"] = "hyp"
         np.set_printoptions(linewidth=sys.maxsize)  # for printing scores in stdout
-        test_data.set_item(input_str)
-        hypotheses, tokens, scores, att_score = _translate_data(test_data, test_cfg)
+        # for adding lines....
+        if isinstance(input_str,list):
+            for line in input_str:
+                test_data.set_item(line)
+        else:
+            test_data.set_item(input_str)
+        hypotheses, tokens, scores, att_score, batch_results = _translate_data(test_data, test_cfg)
 
         # print("JoeyNMT:")
         # for i, (hyp, token,
@@ -576,7 +585,7 @@ def translate(
 
         # reset cache
         test_data.cache = {}
-        return hypotheses, tokens, scores, att_score
+        return hypotheses, tokens, scores, att_score, batch_results
     else:
         # enter interactive mode
         test_cfg["batch_size"] = 1  # CAUTION: this will raise an error if n_gpus > 1
