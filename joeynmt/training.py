@@ -658,6 +658,7 @@ class TrainManager:
             valid_hypotheses_raw,
             valid_sequence_scores,  # pylint: disable=unused-variable
             valid_attention_scores,
+            _
         ) = predict(
             model=self.model,
             data=valid_data,
@@ -920,23 +921,22 @@ def random_query(data_loader, query_size=10):
 
 def least_confidence_query(model, device, data_loader, query_size=10):
 
-    margins = []
+    confidences = []
     indices = []
     
-   
-    for batch in data_loader:
-        batch_result = generate_data_d(batch,data,cfg_file,ckpt)
-#         total_nseqs += batch.nseqs  # number of sentences in the current batch
-        break
-
-    probabilities = torch.as_tensor(np.vstack(list(batch_result.values())))
+    model.eval()
+    
+    with torch.no_grad():
+        for batch in data_loader:
+        
+            data, _, idx = batch
+            logits = model(data.to(device))
+            probabilities = F.softmax(logits, dim=1)
             
-       
-
-    # Keep only the top class confidence for each sample
-    most_probable = torch.max(probabilities, dim=1)[0]
-    confidences.extend(most_probable.cpu().tolist())
-    indices.extend(np.hstack(list(batch_result.keys())))
+            # Keep only the top class confidence for each sample
+            most_probable = torch.max(probabilities, dim=1)[0]
+            confidences.extend(most_probable.cpu().tolist())
+            indices.extend(idx.tolist())
             
     conf = np.asarray(confidences)
     ind = np.asarray(indices)
@@ -952,7 +952,8 @@ def margin_query(model, device, data_loader, query_size=10,cfg_file=None,data=No
     
    
     for batch in data_loader:
-        batch_result = generate_data_d(batch,data,cfg_file,ckpt)
+        batch_result = batch_test_n_best(batch,data,cfg_file,ckpt)
+#         batch_result = generate_data_d(batch,data,cfg_file,ckpt)
 #         total_nseqs += batch.nseqs  # number of sentences in the current batch
         break
 
@@ -974,7 +975,23 @@ def margin_query(model, device, data_loader, query_size=10,cfg_file=None,data=No
     print(index[sorted_pool][0:query_size])
     return index[sorted_pool][0:query_size]
 
-
+def batch_test_n_best(batch,data,cfg_file,ckpt):
+    sen_batch= 4
+    sent=[]
+    idx_ = np.arange(sen_batch) # you can use random one
+    for sent_id in idx_:
+        sent.append(" ".join(data.display(sent_id)))
+    hypotheses, tokens, scores, _, batch_results = translate(cfg_file,ckpt,output_path=None,input_str=sent)
+    
+    hypotheses=batch_results['predictions']
+    scores=batch_results['scores']  # size: batch_size,n_best
+    sent_list = {}
+    for i, batch in enumerate(scores):
+        batch=[val.item() for val in batch]
+        sent_list[i]=batch
+    import ipdb; ipdb.set_trace() # my end point
+    print(sent_list)
+    return sent_list
 def generate_data_d(batch,data,cfg_file,ckpt):
     idx_ = np.arange(batch.src.shape[0])
     # _, _, idx = batch
@@ -983,7 +1000,7 @@ def generate_data_d(batch,data,cfg_file,ckpt):
     for sent_id in idx_:
         sent = " ".join(data.display(sent_id))
         print(sent)
-        hypotheses, tokens, scores, _ = translate(cfg_file,ckpt,output_path=None,input_str=sent)
+        hypotheses, tokens, scores, _, batch_results = translate(cfg_file,ckpt,output_path=None,input_str=sent)
         print(scores)
         sent_list[sent_id] = [i[0] for i in scores]
     print(sent_list)
@@ -1103,77 +1120,38 @@ def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
     
-    query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random',
-                     interactive=True, pool_size=0, batch_size=128, num_workers=4, cfg_file=cfg_file)
+    # query_the_oracle(model, torch.device("cpu"), train_data, query_size=10, query_strategy='random', 
+    #                  interactive=True, pool_size=0, batch_size=128, num_workers=4, cfg_file=cfg_file)
     
     
      # for training management, e.g. early stopping and model selection
     trainer = TrainManager(model=model, cfg=cfg)
-
+    query_the_oracle(model, trainer.device, train_data, query_size=5, query_strategy='margin', interactive=True, pool_size=0, cfg_file=cfg_file,ckpt=ckpt)
 
     # train the model
     trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
-    num_queries = 3
-    for query in range(num_queries):
     
-        # Query the oracle for more labels
-        query_the_oracle(model, trainer.device, train_data, query_size=5, query_strategy='margin', interactive=True, pool_size=0, cfg_file=cfg_file,ckpt=ckpt)
+#     for query in range(num_queries):
+    
+#         # Query the oracle for more labels
+#         query_the_oracle(classifier, device, train_set, query_size=5, query_strategy='margin', interactive=True, pool_size=0)
 
-        # Train the model on the data that has been labeled so far:
-        labeled_idx = np.where(train_data.unlabeled_mask == 0)[0]
-        # labeled_loader = DataLoader(train_set, batch_size=batch_size, num_workers=10,
-        #                             sampler=SubsetRandomSampler(labeled_idx))
-        labeled_loader = DataLoader(
-                                train_data,
-                                # batch_size=batch_size,
-                                batch_sampler = SentenceBatchSampler(RandomSampler(train_data),
-                                             batch_size=batch_size,
-                                             drop_last=False),
-                                # sampler=SubsetRandomSampler(unlabeled_idx),
-                                collate_fn=partial(
-                                    collate_fn,
-                                    src_process=train_data.sequence_encoder[train_data.src_lang],
-                                    trg_process=train_data.sequence_encoder[train_data.trg_lang],
-                                    pad_index=model.pad_index,
-                                    device=device,
-                                    has_trg=train_data.has_trg,
-                                    is_train=train_data.split == "train",
-                                ),
-                                num_workers=num_workers,
-                            )
-        # previous_test_acc = 0
-        # current_test_acc = 1
-        # while current_test_acc > previous_test_acc:
-        #     previous_test_acc = current_test_acc
-        #     train_loss = train(classifier, device, labeled_loader, optimizer, criterion)
-        #     _, current_test_acc = test(classifier, device, test_loader, criterion)
-        # train the model
-        trainer.train_and_validate(train_data=train_data, valid_data=dev_data)
-
-        if not skip_test:
-            # predict with the best model on validation and test
-            # (if test data is available)
-
-            ckpt = model_dir / f"{trainer.stats.best_ckpt_iter}.ckpt"
-            output_path = model_dir / f"{trainer.stats.best_ckpt_iter:08d}.hyps"
-
-            datasets_to_test = {
-                "dev": dev_data,
-                "test": test_data,
-                "src_vocab": src_vocab,
-                "trg_vocab": trg_vocab,
-            }
-            test(
-                cfg_file,
-                ckpt=ckpt.as_posix(),
-                output_path=output_path.as_posix(),
-                datasets=datasets_to_test,
-            )
+#         # Train the model on the data that has been labeled so far:
+#         labeled_idx = np.where(train_set.unlabeled_mask == 0)[0]
+#         labeled_loader = DataLoader(train_set, batch_size=batch_size, num_workers=10, 
+#                                     sampler=SubsetRandomSampler(labeled_idx))
+#         previous_test_acc = 0
+#         current_test_acc = 1
+#         while current_test_acc > previous_test_acc:
+#             previous_test_acc = current_test_acc
+#             train_loss = train(classifier, device, labeled_loader, optimizer, criterion)
+#             _, current_test_acc = test(classifier, device, test_loader, criterion)
 
 
-        # Test the model:
-        # test(classifier, device, test_loader, criterion, display=True)
-
+#         # Test the model:
+#         test(classifier, device, test_loader, criterion, display=True)
+    
+    return model
 
 
 
