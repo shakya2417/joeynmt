@@ -1077,7 +1077,7 @@ def query_the_oracle(model, device, dataset, query_size=10, query_strategy='rand
         else:
             dataset.label_from_file(sample)
 
-def gen_al_dataset(train_dataset,indexs=None):
+def gen_al_dataset(train_dataset,indexs=None,al_train=None):
     def map_indexs(dataset,postions):
         new_data=copy.deepcopy(dataset)
         sen_data=new_data.data
@@ -1088,20 +1088,21 @@ def gen_al_dataset(train_dataset,indexs=None):
         assert len(src_sen)==len(trg_sen)
         new_data.data={src_lang:src_sen,trg_lang:trg_sen}
         new_data._initial_len=len(postions)
+        import ipdb; ipdb.set_trace()
         return new_data
 
     train_dataset.al_dataset=True
     src_lang=train_dataset.src_lang
     trg_lang=train_dataset.trg_lang
+    len_=len(train_dataset.data[src_lang])
     import ipdb; ipdb.set_trace()
     if indexs:
         #indexes coming from model which need to re_train
         indexs=np.array(indexs)
     else:
-        train_dataset.sample_random_subset()
-        indexs=np.array(train_dataset.indexes)
+        random_subset=int((len_/100)*al_train)
+        indexs=np.arange(random_subset)
     
-    len_=len(train_dataset.data[src_lang])
     full_data_len= np.arange(len_)
     pool_indexs=np.delete(full_data_len,indexs)
     
@@ -1155,7 +1156,8 @@ def train_model_ac(cfg_file: str, skip_test: bool = False) -> Any:
     if hasattr(train_data.tokenizer[train_data.trg_lang], "copy_cfg_file"):
         train_data.tokenizer[train_data.trg_lang].copy_cfg_file(model_dir)
     # create pool_dataset and subset_sample_datsset
-    pool_data, subset_data = gen_al_dataset(train_data)
+    al_train=cfg['data'].get('al_train',-1)
+    pool_data, subset_data = gen_al_dataset(train_data,al_train=al_train,indexs=None)
 
     # build an encoder-decoder model
     model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
