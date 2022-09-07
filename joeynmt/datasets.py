@@ -256,7 +256,6 @@ class PlaintextDatasetAC(BaseDataset):
         # for random subsampling
         self.idx_map = []
         self.unlabeled_mask = np.ones(self._initial_len)
-        self.al_dataset=False
         # image_filenames = []
         # for (dirpath, dirnames, filenames) in os.walk(dir_path):
         #     image_filenames += [os.path.join(dirpath, file) for file in filenames if is_image(file)]
@@ -289,13 +288,7 @@ class PlaintextDatasetAC(BaseDataset):
         super().sample_random_subset(seed)  # check validity
 
         random.seed(seed)  # resample every epoch: seed += epoch_no
-        if self.al_dataset:
-            self.random_subset=int((self._initial_len/100)*self.random_subset)
-            self.indexes=list(random.sample(range(self._initial_len), self.random_subset))
-            print('***************************************************************************')
-        else:
-            print('###########################################################################')
-            self.idx_map = list(random.sample(range(self._initial_len), self.random_subset))
+        self.idx_map = list(random.sample(range(self._initial_len), self.random_subset))
 
     def reset_random_subset(self):
         self.idx_map = []
