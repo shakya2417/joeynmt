@@ -256,6 +256,7 @@ class PlaintextDatasetAC(BaseDataset):
         # for random subsampling
         self.idx_map = []
         self.unlabeled_mask = np.ones(self._initial_len)
+        self.al_dataset=False
         # image_filenames = []
         # for (dirpath, dirnames, filenames) in os.walk(dir_path):
         #     image_filenames += [os.path.join(dirpath, file) for file in filenames if is_image(file)]
@@ -288,7 +289,13 @@ class PlaintextDatasetAC(BaseDataset):
         super().sample_random_subset(seed)  # check validity
 
         random.seed(seed)  # resample every epoch: seed += epoch_no
-        self.idx_map = list(random.sample(range(self._initial_len), self.random_subset))
+        if self.al_dataset:
+            self.random_subset=int((self._initial_len/100)*self.random_subset)
+            self.indexes=list(random.sample(range(self._initial_len), self.random_subset))
+            print('***************************************************************************')
+        else:
+            print('###########################################################################')
+            self.idx_map = list(random.sample(range(self._initial_len), self.random_subset))
 
     def reset_random_subset(self):
         self.idx_map = []
@@ -333,7 +340,7 @@ class PlaintextDatasetAC(BaseDataset):
     # Display the image [idx] and its filename
     def display(self, idx):
         img_name = self.get_item(idx,lang=self.src_lang)
-        print(img_name)
+        # print(len(img_name), img_name)
         # img=mpimg.imread(img_name)
         # imgplot = plt.imshow(img)
         # plt.show()
@@ -348,7 +355,7 @@ class PlaintextDatasetAC(BaseDataset):
     
     # Set the label of image [idx] to that read from its filename
     def label_from_file(self, idx):
-        self.data[self.trg_lang][idx] = self.data[lang][idx]
+        self.data[self.trg_lang][idx] = self.data[self.src_lang][idx]
         self.unlabeled_mask[idx] = 0
         return
 
